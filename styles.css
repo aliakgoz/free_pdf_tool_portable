@@ -2343,6 +2343,23 @@ body {
   font-size: 0.6rem;
 }
 
+.page-card__actions {
+  opacity: 1;
+}
+
+.page-card__handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  letter-spacing: -0.08em;
+  font-weight: 900;
+}
+
+.page-card__handle:active,
+.page-card.is-dragging .page-card__handle {
+  cursor: grabbing;
+}
+
 .editor-overlay--highlight,
 .editor-overlay--erase {
   box-shadow: none;

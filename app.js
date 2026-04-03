@@ -581,18 +581,13 @@
               <div class="card__list">
                 <span>${escapeHtml(output.description)}</span>
               </div>
-              <div class="stacked-actions">
-                <button class="primary-button primary-button--block" data-action="download-output" data-tool-output="${toolId}" type="button">
-                  ${escapeHtml(t("outputDownload"))}
-                </button>
-                ${
-                  output.reusable
-                    ? `<button class="ghost-button ghost-button--block" data-action="reuse-output" data-tool-output="${toolId}" type="button">${escapeHtml(
-                        t("outputReuse")
-                      )}</button>`
-                    : ""
-                }
-              </div>
+              ${
+                output.reusable
+                  ? `<div class="stacked-actions"><button class="ghost-button ghost-button--block" data-action="reuse-output" data-tool-output="${toolId}" type="button">${escapeHtml(
+                      t("outputReuse")
+                    )}</button></div>`
+                  : ""
+              }
             `
             : `<p class="card__copy">${escapeHtml(t("noOutput"))}</p>`
         }
@@ -604,7 +599,6 @@
     const docs = state.merge.docIds.map(getDoc).filter(Boolean);
     return `
       <div class="workspace-shell">
-        ${renderCommonAside("merge")}
         <section class="workspace-shell__main workspace-shell__main--merge">
           <div class="workspace-panel workspace-panel--span-2">
             <div class="workspace-panel__header">
@@ -638,6 +632,7 @@
             </div>
           </div>
         </section>
+        ${renderCommonAside("merge")}
         <aside class="workspace-shell__actions">
           <div class="card">
             <p class="card__title">${escapeHtml(t("summaryTitle"))}</p>
@@ -779,7 +774,6 @@
     const groups = safeComputeSplitGroups();
     return `
       <div class="workspace-shell">
-        ${renderCommonAside("split")}
         <section class="workspace-shell__main workspace-shell__main--split">
           <div class="workspace-panel workspace-panel--span-2">
             <div class="workspace-panel__header">
@@ -805,6 +799,7 @@
             </div>
           </div>
         </section>
+        ${renderCommonAside("split")}
         <aside class="workspace-shell__actions">
           <div class="card">
             <p class="card__title">${escapeHtml(t("summaryTitle"))}</p>
@@ -826,7 +821,6 @@
 
   function renderEditWorkspace() {
     const doc = getDoc(state.edit.docId);
-    const output = state.outputs.edit;
     const selectedOverlay = getSelectedOverlay();
     const currentText = selectedOverlay && (selectedOverlay.type === "text" || selectedOverlay.type === "comment") ? selectedOverlay.text : "";
     const currentFont = selectedOverlay && selectedOverlay.fontSize ? selectedOverlay.fontSize : state.edit.defaults.fontSize;
@@ -853,13 +847,6 @@
               <span class="edit-ribbon__label">${escapeHtml(langText("Dosya", "File"))}</span>
               <button class="ghost-button" data-action="browse-main" type="button">${escapeHtml(t("uploadPdf"))}</button>
               <button class="primary-button" data-action="run-tool" type="button">${escapeHtml(langText("Kaydet PDF", "Save PDF"))}</button>
-              ${
-                output
-                  ? `<button class="ghost-button" data-action="download-output" data-tool-output="edit" type="button">${escapeHtml(
-                      t("outputDownload")
-                    )}</button>`
-                  : ""
-              }
             </div>
             <div class="edit-ribbon__group">
               <span class="edit-ribbon__label">${escapeHtml(langText("Araclar", "Tools"))}</span>
@@ -993,22 +980,7 @@
             )}</span>
           </div>
           <div class="edit-statusbar__actions">
-            ${
-              output
-                ? `
-                  <button class="primary-button" data-action="download-output" data-tool-output="edit" type="button">${escapeHtml(
-                    t("outputDownload")
-                  )}</button>
-                  ${
-                    output.reusable
-                      ? `<button class="ghost-button" data-action="reuse-output" data-tool-output="edit" type="button">${escapeHtml(
-                          t("outputReuse")
-                        )}</button>`
-                      : ""
-                  }
-                `
-                : `<button class="primary-button" data-action="run-tool" type="button">${escapeHtml(t("runLabels.edit"))}</button>`
-            }
+            <button class="primary-button" data-action="run-tool" type="button">${escapeHtml(t("runLabels.edit"))}</button>
           </div>
           <ol id="statusFeed" class="status-feed status-feed--compact"></ol>
         </footer>
@@ -1113,6 +1085,13 @@
           <span>${escapeHtml(item.docName)}</span>
         </div>
         <div class="page-card__actions">
+          <button
+            class="ghost-button page-card__handle"
+            data-drag-handle="organize"
+            type="button"
+            title="${escapeHtml(langText("Tasi", "Move"))}"
+            aria-label="${escapeHtml(langText("Tasi", "Move"))}"
+          >::</button>
           <button
             class="ghost-button"
             data-action="rotate-organize-page"
@@ -1546,6 +1525,7 @@
 
   function handleDragStart(event) {
     const interactiveTarget = event.target.closest("button, input, textarea, select, label");
+    const organizeDragHandle = event.target.closest("[data-drag-handle='organize']");
     const mergeCard = event.target.closest("[data-merge-doc]");
     if (mergeCard) {
       if (interactiveTarget && interactiveTarget !== mergeCard && mergeCard.contains(interactiveTarget)) {
@@ -1565,7 +1545,7 @@
 
     const pageCard = event.target.closest("[data-page-card]");
     if (pageCard) {
-      if (interactiveTarget && interactiveTarget !== pageCard && pageCard.contains(interactiveTarget)) {
+      if ((!organizeDragHandle && interactiveTarget && interactiveTarget !== pageCard && pageCard.contains(interactiveTarget)) || !organizeDragHandle) {
         event.preventDefault();
         return;
       }
@@ -1690,18 +1670,20 @@
   }
 
   function maybeStartPressDrag(event, tool) {
-    if (event.pointerType === "mouse") {
-      return false;
-    }
-
     const interactiveTarget = event.target.closest("button, input, textarea, select, label");
+    const organizeHandle = event.target.closest("[data-drag-handle='organize']");
     const card =
       tool === "organize" ? event.target.closest("[data-page-card]") : event.target.closest("[data-merge-doc]");
     if (!card) {
       return false;
     }
-    if (interactiveTarget && interactiveTarget !== card && card.contains(interactiveTarget)) {
+    if (tool === "organize" && !organizeHandle) {
       return false;
+    }
+    if (interactiveTarget && interactiveTarget !== card && card.contains(interactiveTarget)) {
+      if (!(tool === "organize" && organizeHandle && interactiveTarget === organizeHandle)) {
+        return false;
+      }
     }
 
     const sourceId = tool === "organize" ? card.dataset.pageCard : card.dataset.mergeDoc;
@@ -2141,6 +2123,9 @@
       }
       if (toolId === "edit") {
         await exportEditedPdf();
+      }
+      if (state.outputs[toolId]) {
+        await downloadToolOutput(toolId);
       }
       render();
     } catch (error) {
