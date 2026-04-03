@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas PDF Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <input id="mainFileInput" type="file" accept=".pdf" multiple hidden />
+    <input id="insertFileInput" type="file" accept=".pdf" multiple hidden />
+
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <span class="brand-block__mark">Atlas</span>
+          <p class="brand-block__text">PDF Hub</p>
+        </div>
+        <nav class="topnav" aria-label="Primary">
+          <button class="topnav__link" data-nav-tool="merge" type="button">MERGE PDF</button>
+          <button class="topnav__link" data-nav-tool="split" type="button">SPLIT PDF</button>
+          <button class="topnav__link" data-nav-tool="organize" type="button">ORGANIZE PDF</button>
+          <button class="topnav__link" data-nav-tool="edit" type="button">EDIT PDF</button>
+        </nav>
+        <div class="topbar__right">
+          <div class="lang-switcher" id="languageSwitcher" aria-label="Language switcher">
+            <button class="lang-switcher__btn lang-switcher__btn--active" data-lang="tr" type="button">TR</button>
+            <button class="lang-switcher__btn" data-lang="en" type="button">EN</button>
+          </div>
+          <button class="topbar__hint" data-hook="openHelp" type="button">Help</button>
+        </div>
+      </header>
+
+      <main id="routerOutlet">
+        <section id="homeView" class="view view--active"></section>
+        <section id="workspaceView" class="view"></section>
+      </main>
+    </div>
+
+    <div id="modalToast" class="modal hidden" role="dialog" aria-modal="true"></div>
+  </body>
+</html>
