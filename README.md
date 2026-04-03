@@ -1,6 +1,6 @@
 # Atlas PDF Hub
 
-Atlas PDF Hub is a browser-only PDF workspace inspired by multi-tool products such as iLovePDF, but implemented as a static client-side app.
+Atlas PDF Hub is a browser-only PDF workspace inspired by multi-tool products, but implemented as a static client-side app.
 
 ## What it does
 
