@@ -326,6 +326,8 @@
       docIds: [],
       previewDocId: null,
       dragDocId: null,
+      selectedInsertIndex: 0,
+      dropIndicatorIndex: null,
     },
     organize: {
       pageItems: [],
@@ -360,6 +362,18 @@
         fontFamily: "helvetica",
         fontStyle: "regular",
       },
+    },
+    dragAssist: {
+      pointerId: null,
+      kind: null,
+      sourceId: null,
+      sourceIds: [],
+      dropIndex: null,
+      startX: 0,
+      startY: 0,
+      activated: false,
+      timerId: null,
+      suppressClickUntil: 0,
     },
   };
 
@@ -598,13 +612,18 @@
                 <p class="eyebrow">${escapeHtml(t("mergeQueueTitle"))}</p>
                 <span>${escapeHtml(t("mergePrimaryHint"))}</span>
               </div>
-              <button class="ghost-button" data-action="clear-tool" data-tool-clear="merge">${escapeHtml(t("clearAll"))}</button>
+              <div class="toolbar-inline">
+                <button class="ghost-button" data-action="browse-main" type="button">${escapeHtml(t("addPdf"))}</button>
+                <button class="ghost-button" data-action="clear-tool" data-tool-clear="merge" type="button">${escapeHtml(
+                  t("clearAll")
+                )}</button>
+              </div>
             </div>
             <div class="workspace-panel__body">
               ${
                 docs.length === 0
                   ? `<div class="workspace-placeholder"><p>${escapeHtml(t("emptyStates.merge"))}</p></div>`
-                  : `<div class="doc-queue">${docs.map(renderMergeDocCard).join("")}</div>`
+                  : `<div id="mergeBoard" class="merge-board">${renderMergeBoard(docs)}</div>`
               }
             </div>
           </div>
@@ -1020,6 +1039,42 @@
     return stacks.join("");
   }
 
+  function renderMergeBoard(docs) {
+    const stacks = docs.map(
+      (doc, index) => `
+        <div class="merge-stack${state.merge.dropIndicatorIndex === index ? " is-drop-zone" : ""}" data-merge-stack-index="${index}">
+          ${renderMergeInsertSlot(index)}
+          ${renderMergeDocCard(doc, index)}
+        </div>
+      `
+    );
+    stacks.push(`
+      <div
+        class="merge-stack merge-stack--end${state.merge.dropIndicatorIndex === docs.length ? " is-drop-zone" : ""}"
+        data-merge-stack-index="${docs.length}"
+      >
+        ${renderMergeInsertSlot(docs.length)}
+      </div>
+    `);
+    return stacks.join("");
+  }
+
+  function renderMergeInsertSlot(index) {
+    return `
+      <button
+        class="merge-insert-slot${state.merge.selectedInsertIndex === index ? " is-selected" : ""}${
+          state.merge.dropIndicatorIndex === index ? " is-drop-target" : ""
+        }"
+        data-action="select-merge-slot"
+        data-merge-insert-index="${index}"
+        type="button"
+      >
+        <span>+</span>
+        <small>${escapeHtml(t("insertSlot"))}</small>
+      </button>
+    `;
+  }
+
   function renderInsertSlot(index) {
     return `
       <button
@@ -1233,7 +1288,9 @@
   function afterRender() {
     renderStatusFeed();
     if (getActiveTool() === "merge") {
+      renderMergeThumbnails();
       renderMergePreview();
+      refreshMergeDropFeedback();
     }
     if (getActiveTool() === "organize") {
       renderOrganizeThumbStrip();
@@ -1251,6 +1308,11 @@
   }
 
   async function handleClick(event) {
+    if (Date.now() < state.dragAssist.suppressClickUntil) {
+      event.preventDefault();
+      return;
+    }
+
     const langButton = event.target.closest("[data-lang]");
     if (langButton) {
       event.preventDefault();
@@ -1292,6 +1354,10 @@
 
     switch (actionNode.dataset.action) {
       case "browse-main":
+        if (getActiveTool() === "merge") {
+          state.merge.selectedInsertIndex = state.merge.docIds.length;
+          state.merge.dropIndicatorIndex = null;
+        }
         elements.mainFileInput.multiple = ["merge", "organize"].includes(getActiveTool());
         elements.mainFileInput.click();
         break;
@@ -1313,6 +1379,15 @@
         break;
       case "merge-select-doc":
         state.merge.previewDocId = actionNode.dataset.docId;
+        state.merge.selectedInsertIndex = getMergeDocIndex(actionNode.dataset.docId) + 1;
+        state.merge.dropIndicatorIndex = null;
+        render();
+        break;
+      case "select-merge-slot":
+        state.merge.selectedInsertIndex = Number(actionNode.dataset.mergeInsertIndex);
+        state.merge.dropIndicatorIndex = null;
+        elements.mainFileInput.multiple = true;
+        elements.mainFileInput.click();
         render();
         break;
       case "remove-merge-doc":
@@ -1478,6 +1553,9 @@
         return;
       }
       state.merge.dragDocId = mergeCard.dataset.mergeDoc;
+      state.merge.previewDocId = state.merge.dragDocId;
+      state.merge.dropIndicatorIndex = getMergeDocIndex(state.merge.dragDocId);
+      refreshMergeDropFeedback();
       if (event.dataTransfer) {
         event.dataTransfer.setData("text/plain", state.merge.dragDocId);
         event.dataTransfer.effectAllowed = "move";
@@ -1512,10 +1590,23 @@
 
   function handleDragOver(event) {
     const tool = getActiveTool();
-    if (tool === "merge" && event.target.closest("[data-merge-doc]")) {
-      event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "move";
+    if (tool === "merge") {
+      const mergeIndex = resolveMergeDropIndex(event);
+      if (mergeIndex !== null) {
+        event.preventDefault();
+        if (event.dataTransfer) {
+          const hasFilePayload =
+            Array.from(event.dataTransfer.items || []).some((item) => item.kind === "file") ||
+            Array.from(event.dataTransfer.types || []).includes("Files");
+          event.dataTransfer.dropEffect = hasFilePayload ? "copy" : "move";
+        }
+        if (state.merge.dropIndicatorIndex !== mergeIndex) {
+          state.merge.dropIndicatorIndex = mergeIndex;
+          refreshMergeDropFeedback();
+        }
+      } else if (state.merge.dropIndicatorIndex !== null) {
+        state.merge.dropIndicatorIndex = null;
+        refreshMergeDropFeedback();
       }
     }
 
@@ -1560,13 +1651,19 @@
     }
 
     if (tool === "merge") {
-      const target = event.target.closest("[data-merge-doc]");
-      if (!target || !state.merge.dragDocId) {
+      const targetIndex = resolveMergeDropIndex(event);
+      if (targetIndex !== null && files.length > 0) {
+        event.preventDefault();
+        state.merge.selectedInsertIndex = targetIndex;
+        state.merge.dropIndicatorIndex = null;
+        await handleToolUpload(files, "merge");
         return;
       }
-      event.preventDefault();
-      reorderMergeDocs(state.merge.dragDocId, target.dataset.mergeDoc);
-      return;
+      if (targetIndex !== null && state.merge.dragDocId) {
+        event.preventDefault();
+        moveMergeDoc(state.merge.dragDocId, targetIndex);
+        return;
+      }
     }
 
     if (tool === "organize") {
@@ -1588,12 +1685,176 @@
   }
 
   function handleDragEnd() {
-    state.merge.dragDocId = null;
+    clearMergeDragState();
     clearOrganizeDragState();
   }
 
+  function maybeStartPressDrag(event, tool) {
+    if (event.pointerType === "mouse") {
+      return false;
+    }
+
+    const interactiveTarget = event.target.closest("button, input, textarea, select, label");
+    const card =
+      tool === "organize" ? event.target.closest("[data-page-card]") : event.target.closest("[data-merge-doc]");
+    if (!card) {
+      return false;
+    }
+    if (interactiveTarget && interactiveTarget !== card && card.contains(interactiveTarget)) {
+      return false;
+    }
+
+    const sourceId = tool === "organize" ? card.dataset.pageCard : card.dataset.mergeDoc;
+    if (!sourceId) {
+      return false;
+    }
+
+    clearPressDragTimer();
+    state.dragAssist.pointerId = event.pointerId;
+    state.dragAssist.kind = tool;
+    state.dragAssist.sourceId = sourceId;
+    state.dragAssist.sourceIds =
+      tool === "organize" && state.organize.selectedPageIds.includes(sourceId)
+        ? [...state.organize.selectedPageIds]
+        : [sourceId];
+    state.dragAssist.dropIndex = null;
+    state.dragAssist.startX = event.clientX;
+    state.dragAssist.startY = event.clientY;
+    state.dragAssist.activated = false;
+    state.dragAssist.timerId = window.setTimeout(() => {
+      activatePressDrag();
+    }, 220);
+    return true;
+  }
+
+  function activatePressDrag() {
+    const { kind, sourceId, sourceIds } = state.dragAssist;
+    if (!kind || !sourceId) {
+      return;
+    }
+    state.dragAssist.timerId = null;
+    state.dragAssist.activated = true;
+
+    if (kind === "organize") {
+      if (!state.organize.selectedPageIds.includes(sourceId)) {
+        state.organize.selectedPageId = sourceId;
+        state.organize.selectedPageIds = [sourceId];
+        state.organize.lastSelectedPageId = sourceId;
+      }
+      state.organize.dragPageId = sourceId;
+      state.organize.dragPageIds = [...sourceIds];
+      state.organize.dropIndicatorIndex = getPageIndexById(sourceId);
+      refreshOrganizeDropFeedback();
+      render();
+      return;
+    }
+
+    state.merge.previewDocId = sourceId;
+    state.merge.dragDocId = sourceId;
+    state.merge.dropIndicatorIndex = getMergeDocIndex(sourceId);
+    refreshMergeDropFeedback();
+    render();
+  }
+
+  function handlePressDragMove(event) {
+    if (state.dragAssist.pointerId !== event.pointerId || !state.dragAssist.kind) {
+      return false;
+    }
+
+    if (!state.dragAssist.activated) {
+      const movedEnough =
+        Math.hypot(event.clientX - state.dragAssist.startX, event.clientY - state.dragAssist.startY) > 10;
+      if (movedEnough) {
+        resetPressDrag();
+      }
+      return false;
+    }
+
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const dropIndex =
+      state.dragAssist.kind === "organize"
+        ? resolveOrganizeDropIndex({ target, clientX: event.clientX, clientY: event.clientY })
+        : resolveMergeDropIndex({ target, clientX: event.clientX, clientY: event.clientY });
+
+    if (state.dragAssist.kind === "organize" && state.organize.dropIndicatorIndex !== dropIndex) {
+      state.organize.dropIndicatorIndex = dropIndex;
+      refreshOrganizeDropFeedback();
+    }
+
+    if (state.dragAssist.kind === "merge" && state.merge.dropIndicatorIndex !== dropIndex) {
+      state.merge.dropIndicatorIndex = dropIndex;
+      refreshMergeDropFeedback();
+    }
+
+    state.dragAssist.dropIndex = dropIndex;
+    return true;
+  }
+
+  function finishPressDrag() {
+    if (!state.dragAssist.kind) {
+      return false;
+    }
+
+    clearPressDragTimer();
+    if (!state.dragAssist.activated) {
+      resetPressDrag();
+      return false;
+    }
+
+    const kind = state.dragAssist.kind;
+    const sourceId = state.dragAssist.sourceId;
+    const dropIndex = state.dragAssist.dropIndex;
+    state.dragAssist.suppressClickUntil = Date.now() + 280;
+    resetPressDrag(true);
+
+    if (kind === "organize") {
+      if (dropIndex !== null) {
+        moveOrganizePage(sourceId, dropIndex);
+      } else {
+        clearOrganizeDragState();
+        render();
+      }
+      return true;
+    }
+
+    if (dropIndex !== null) {
+      moveMergeDoc(sourceId, dropIndex);
+    } else {
+      clearMergeDragState();
+      render();
+    }
+    return true;
+  }
+
+  function clearPressDragTimer() {
+    if (state.dragAssist.timerId) {
+      window.clearTimeout(state.dragAssist.timerId);
+      state.dragAssist.timerId = null;
+    }
+  }
+
+  function resetPressDrag(preserveSuppressClick = false) {
+    clearPressDragTimer();
+    const suppressClickUntil = preserveSuppressClick ? state.dragAssist.suppressClickUntil : 0;
+    state.dragAssist.pointerId = null;
+    state.dragAssist.kind = null;
+    state.dragAssist.sourceId = null;
+    state.dragAssist.sourceIds = [];
+    state.dragAssist.dropIndex = null;
+    state.dragAssist.startX = 0;
+    state.dragAssist.startY = 0;
+    state.dragAssist.activated = false;
+    state.dragAssist.suppressClickUntil = suppressClickUntil;
+  }
+
   function handlePointerDown(event) {
-    if (getActiveTool() !== "edit") {
+    const activeTool = getActiveTool();
+    if ((activeTool === "organize" || activeTool === "merge") && maybeStartPressDrag(event, activeTool)) {
+      return;
+    }
+
+    if (activeTool !== "edit") {
       return;
     }
 
@@ -1650,7 +1911,12 @@
   }
 
   function handlePointerMove(event) {
-    if (getActiveTool() !== "edit") {
+    const activeTool = getActiveTool();
+    if ((activeTool === "organize" || activeTool === "merge") && handlePressDragMove(event)) {
+      return;
+    }
+
+    if (activeTool !== "edit") {
       return;
     }
 
@@ -1680,7 +1946,12 @@
   }
 
   function handlePointerUp() {
-    if (getActiveTool() !== "edit") {
+    const activeTool = getActiveTool();
+    if ((activeTool === "organize" || activeTool === "merge") && finishPressDrag()) {
+      return;
+    }
+
+    if (activeTool !== "edit") {
       return;
     }
 
@@ -1750,12 +2021,16 @@
       setBusy(true);
       if (toolId === "merge") {
         invalidateOutput("merge");
+        let insertIndex = state.merge.selectedInsertIndex;
         for (const file of pdfFiles) {
           const doc = await loadPdfDocument(file);
-          state.merge.docIds.push(doc.id);
+          insertMergeDocs(insertIndex, [doc.id]);
           if (!state.merge.previewDocId) {
             state.merge.previewDocId = doc.id;
           }
+          insertIndex += 1;
+          state.merge.selectedInsertIndex = insertIndex;
+          state.merge.dropIndicatorIndex = null;
           logStatus(format(t("statusLoaded"), { name: doc.name }), "info");
         }
       }
@@ -1881,6 +2156,8 @@
       state.merge.docIds = [];
       state.merge.previewDocId = null;
       state.merge.dragDocId = null;
+      state.merge.selectedInsertIndex = 0;
+      state.merge.dropIndicatorIndex = null;
       state.outputs.merge = null;
     }
     if (toolId === "organize") {
@@ -1922,27 +2199,89 @@
     if (state.merge.previewDocId === docId) {
       state.merge.previewDocId = state.merge.docIds[0] || null;
     }
+    state.merge.selectedInsertIndex = clamp(state.merge.selectedInsertIndex, 0, state.merge.docIds.length);
+    state.merge.dropIndicatorIndex = null;
     invalidateOutput("merge");
     render();
   }
 
-  function reorderMergeDocs(fromId, toId) {
-    if (fromId === toId) {
-      return;
-    }
+  function insertMergeDocs(index, docIds) {
+    const list = [...state.merge.docIds];
+    list.splice(clamp(index, 0, list.length), 0, ...docIds);
+    state.merge.docIds = list;
+  }
+
+  function getMergeDocIndex(docId) {
+    return state.merge.docIds.indexOf(docId);
+  }
+
+  function moveMergeDoc(fromId, insertIndex) {
     const list = [...state.merge.docIds];
     const fromIndex = list.indexOf(fromId);
-    const toIndex = list.indexOf(toId);
-    if (fromIndex === -1 || toIndex === -1) {
+    if (fromIndex === -1) {
       return;
     }
     const [moved] = list.splice(fromIndex, 1);
-    const targetIndex = toIndex > fromIndex ? toIndex - 1 : toIndex;
+    const normalizedInsertIndex = clamp(insertIndex, 0, state.merge.docIds.length);
+    const targetIndex = normalizedInsertIndex > fromIndex ? normalizedInsertIndex - 1 : normalizedInsertIndex;
     list.splice(targetIndex, 0, moved);
     state.merge.docIds = list;
-    state.merge.dragDocId = null;
+    state.merge.previewDocId = moved;
+    state.merge.selectedInsertIndex = clamp(targetIndex + 1, 0, list.length);
+    clearMergeDragState();
     invalidateOutput("merge");
     render();
+  }
+
+  function resolveMergeDropIndex(source) {
+    const target = source?.target || source;
+    const clientX = source?.clientX ?? 0;
+    const clientY = source?.clientY ?? 0;
+    const slot = target?.closest ? target.closest("[data-merge-insert-index]") : null;
+    if (slot) {
+      return clamp(Number(slot.dataset.mergeInsertIndex), 0, state.merge.docIds.length);
+    }
+
+    const docCard = target?.closest ? target.closest("[data-merge-doc]") : null;
+    if (docCard) {
+      const docId = docCard.dataset.mergeDoc;
+      const docIndex = getMergeDocIndex(docId);
+      if (docIndex === -1) {
+        return null;
+      }
+      const rect = docCard.getBoundingClientRect();
+      const insertAfter = clientY > rect.top + rect.height * 0.58 || clientX > rect.left + rect.width * 0.58;
+      return docIndex + (insertAfter ? 1 : 0);
+    }
+
+    if (target?.closest && (target.closest("#mergeBoard") || target.closest(".merge-board"))) {
+      return state.merge.docIds.length;
+    }
+
+    return null;
+  }
+
+  function clearMergeDragState(clearIndicator = true) {
+    state.merge.dragDocId = null;
+    if (clearIndicator) {
+      state.merge.dropIndicatorIndex = null;
+    }
+    refreshMergeDropFeedback();
+  }
+
+  function refreshMergeDropFeedback() {
+    const indicatorIndex = state.merge.dropIndicatorIndex;
+    document.querySelectorAll(".merge-insert-slot").forEach((slot) => {
+      slot.classList.toggle("is-drop-target", Number(slot.dataset.mergeInsertIndex) === indicatorIndex);
+    });
+    document.querySelectorAll("[data-merge-stack-index]").forEach((stack) => {
+      stack.classList.toggle("is-drop-zone", Number(stack.dataset.mergeStackIndex) === indicatorIndex);
+    });
+    document.querySelectorAll("[data-merge-doc]").forEach((node) => {
+      const docId = node.dataset.mergeDoc;
+      node.classList.toggle("is-selected", state.merge.previewDocId === docId);
+      node.classList.toggle("is-dragging", state.merge.dragDocId === docId);
+    });
   }
 
   function insertPageItems(index, pageItems) {
@@ -2417,7 +2756,7 @@
       reusable,
     };
     refreshOutputCard(toolId);
-    openModal(description);
+    closeModal();
     logStatus(description, "success");
   }
 
@@ -2454,10 +2793,28 @@
   async function renderMergePreview() {
     const canvas = document.getElementById("mergePreviewCanvas");
     const doc = getDoc(state.merge.previewDocId);
-    if (!canvas || !doc) {
+    if (!canvas) {
+      return;
+    }
+    if (!doc) {
+      const context = canvas.getContext("2d");
+      if (context) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+      }
       return;
     }
     await renderPdfPageToCanvas(doc.id, 1, canvas, 1.1);
+  }
+
+  async function renderMergeThumbnails() {
+    const docs = state.merge.docIds.map(getDoc).filter(Boolean);
+    for (const doc of docs) {
+      const img = document.getElementById(`merge-thumb-${doc.id}`);
+      if (!img) {
+        continue;
+      }
+      img.src = await getPageThumbnail(doc.id, 1, 180);
+    }
   }
 
   async function renderOrganizeThumbnails() {
@@ -2586,16 +2943,29 @@
     layer.style.height = `${canvasRect.height}px`;
   }
 
-  function renderMergeDocCard(doc) {
+  function renderMergeDocCard(doc, index) {
+    const isSelected = state.merge.previewDocId === doc.id;
+    const isDragging = state.merge.dragDocId === doc.id;
     return `
-      <article class="doc-card" draggable="true" data-merge-doc="${doc.id}">
+      <article
+        class="doc-card doc-card--tile${isSelected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}"
+        draggable="true"
+        data-merge-doc="${doc.id}"
+        data-merge-index="${index}"
+        data-action="merge-select-doc"
+        data-doc-id="${doc.id}"
+      >
+        <div class="doc-card__thumb">
+          <img id="merge-thumb-${doc.id}" alt="" draggable="false" />
+        </div>
         <div class="doc-card__meta">
           <strong>${escapeHtml(doc.name)}</strong>
           <span>${doc.pageCount} ${pageUnit(doc.pageCount)}</span>
         </div>
         <div class="doc-card__actions">
-          <button class="ghost-button" data-action="merge-select-doc" data-doc-id="${doc.id}">${state.lang === "tr" ? "Onizle" : "Preview"}</button>
-          <button class="ghost-button" data-action="remove-merge-doc" data-doc-id="${doc.id}">${state.lang === "tr" ? "Kaldir" : "Remove"}</button>
+          <button class="ghost-button" data-action="remove-merge-doc" data-doc-id="${doc.id}" type="button">${
+            state.lang === "tr" ? "Kaldir" : "Remove"
+          }</button>
         </div>
       </article>
     `;

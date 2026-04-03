@@ -2385,3 +2385,185 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Merge board overrides */
+.merge-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 150px);
+  gap: 12px;
+  align-content: start;
+}
+
+.merge-stack,
+.merge-stack--end {
+  width: 150px;
+  display: grid;
+  gap: 8px;
+}
+
+.merge-insert-slot {
+  position: relative;
+  width: 150px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px dashed rgba(239, 47, 50, 0.35);
+  background: rgba(255, 255, 255, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #ef2f32;
+  transition:
+    min-height 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.merge-insert-slot span {
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.merge-insert-slot small {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.merge-insert-slot.is-selected {
+  border-color: rgba(239, 47, 50, 0.58);
+  background: rgba(239, 47, 50, 0.08);
+}
+
+.merge-insert-slot.is-drop-target {
+  min-height: 46px;
+  border-color: rgba(239, 47, 50, 0.7);
+  background: rgba(239, 47, 50, 0.08);
+}
+
+.merge-insert-slot.is-drop-target::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: #ef2f32;
+}
+
+.doc-card--tile {
+  position: relative;
+  width: 150px;
+  min-height: 220px;
+  padding: 8px 8px 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  cursor: grab;
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+}
+
+.doc-card--tile.is-selected {
+  border-color: rgba(239, 47, 50, 0.38);
+  box-shadow: 0 14px 30px rgba(17, 24, 39, 0.08);
+}
+
+.doc-card--tile.is-dragging {
+  opacity: 0.48;
+}
+
+.doc-card__thumb {
+  aspect-ratio: 0.72;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  display: grid;
+  place-items: center;
+}
+
+.doc-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.doc-card--tile .doc-card__meta {
+  min-width: 0;
+}
+
+.doc-card--tile .doc-card__meta strong {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.doc-card--tile .doc-card__meta span {
+  font-size: 0.68rem;
+}
+
+.doc-card--tile .doc-card__actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.doc-card--tile .doc-card__actions .ghost-button {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.merge-stack.is-drop-zone .doc-card--tile {
+  transform: translateY(8px);
+}
+
+.page-card,
+.doc-card--tile {
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+}
+
+@media (max-width: 920px) {
+  .merge-board {
+    grid-template-columns: repeat(auto-fill, 134px);
+    gap: 10px;
+  }
+
+  .merge-stack,
+  .merge-stack--end,
+  .doc-card--tile,
+  .merge-insert-slot {
+    width: 134px;
+  }
+}
+
+@media (max-width: 640px) {
+  .merge-board {
+    grid-template-columns: repeat(auto-fill, 116px);
+    gap: 8px;
+  }
+
+  .merge-stack,
+  .merge-stack--end,
+  .doc-card--tile,
+  .merge-insert-slot {
+    width: 116px;
+  }
+
+  .doc-card--tile {
+    min-height: 186px;
+  }
+}
